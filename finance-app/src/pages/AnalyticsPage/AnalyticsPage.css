@@ -1,0 +1,47 @@
+.analytics-page { display: flex; flex-direction: column; gap: var(--space-5); }
+
+.analytics-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-4); }
+.analytics-card {
+  padding: var(--space-5); border-radius: var(--radius-lg);
+  border: 1px solid var(--border-primary); background: var(--bg-card);
+  display: flex; flex-direction: column; gap: var(--space-2);
+}
+.analytics-card-label {
+  font-size: var(--text-xs); font-weight: var(--weight-semibold);
+  color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;
+}
+.analytics-card-value {
+  font-size: var(--text-2xl); font-weight: var(--weight-bold);
+}
+.analytics-card-value.income { color: var(--success); }
+.analytics-card-value.expense { color: var(--danger); }
+.analytics-card-value.profit { color: var(--info); }
+
+.analytics-breakdown {
+  background: var(--bg-card); border: 1px solid var(--border-primary);
+  border-radius: var(--radius-lg); padding: var(--space-5);
+}
+.analytics-section-title {
+  font-size: var(--text-xs); font-weight: var(--weight-semibold);
+  color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;
+  margin-bottom: var(--space-4);
+}
+.breakdown-list { display: flex; flex-direction: column; gap: var(--space-3); }
+.breakdown-item {
+  display: flex; align-items: center; gap: var(--space-3);
+  padding: var(--space-2) 0;
+}
+.breakdown-dot {
+  width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+}
+.breakdown-name {
+  flex: 1; font-size: var(--text-base); color: var(--text-primary);
+}
+.breakdown-amount {
+  font-size: var(--text-base); font-weight: var(--weight-semibold);
+  color: var(--text-primary); min-width: 100px; text-align: right;
+}
+.breakdown-pct {
+  font-size: var(--text-sm); color: var(--text-muted);
+  min-width: 40px; text-align: right;
+}
