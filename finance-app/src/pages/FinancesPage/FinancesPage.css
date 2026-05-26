@@ -1,0 +1,102 @@
+.finances-page { display: flex; flex-direction: column; gap: var(--space-5); }
+
+.fin-tabs { display: flex; gap: var(--space-2); }
+.fin-tab {
+  display: flex; align-items: center; gap: var(--space-2);
+  padding: var(--space-2) var(--space-4); border-radius: var(--radius-full);
+  font-size: var(--text-sm); font-weight: var(--weight-medium);
+  color: var(--text-secondary); background: transparent;
+  border: 1px solid var(--border-primary); cursor: pointer;
+  transition: all var(--transition-fast);
+}
+.fin-tab:hover { background: var(--bg-hover); }
+.fin-tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+.fin-content { display: flex; flex-direction: column; gap: var(--space-4); }
+
+/* Loans */
+.loans-list { display: flex; flex-direction: column; gap: var(--space-4); }
+.loan-card {
+  background: var(--bg-card); border: 1px solid var(--border-primary);
+  border-radius: var(--radius-lg); padding: var(--space-5);
+  display: flex; flex-direction: column; gap: var(--space-3);
+  transition: border-color var(--transition-fast);
+}
+.loan-card:hover { border-color: var(--accent-border); }
+.loan-card-header { display: flex; align-items: center; gap: var(--space-4); }
+.loan-info { display: flex; flex-direction: column; flex: 1; }
+.loan-name { font-size: var(--text-md); font-weight: var(--weight-semibold); color: var(--text-primary); }
+.loan-rate { font-size: var(--text-xs); color: var(--text-muted); }
+.loan-remaining { font-size: var(--text-xl); font-weight: var(--weight-bold); color: var(--text-primary); }
+.loan-circle {
+  width: 44px; height: 44px; border-radius: 50%;
+  background: conic-gradient(var(--color) var(--pct), var(--border-primary) var(--pct));
+  display: flex; align-items: center; justify-content: center;
+  position: relative; flex-shrink: 0;
+}
+.loan-circle::after {
+  content: ''; position: absolute; inset: 5px;
+  border-radius: 50%; background: var(--bg-card);
+}
+.loan-circle-text {
+  position: relative; z-index: 1; font-size: 10px;
+  font-weight: var(--weight-bold); color: var(--text-primary);
+}
+.loan-progress {
+  height: 4px; background: var(--border-primary);
+  border-radius: var(--radius-full); overflow: hidden;
+}
+.loan-progress-bar {
+  height: 100%; border-radius: var(--radius-full);
+  transition: width var(--transition-slow);
+}
+.loan-details {
+  display: flex; justify-content: space-between;
+  font-size: var(--text-xs); color: var(--text-muted);
+}
+.loan-meta { font-size: var(--text-xs); color: var(--accent); }
+.loan-actions { display: flex; gap: var(--space-2); }
+
+/* Savings */
+.savings-list { display: flex; flex-direction: column; gap: var(--space-4); }
+.saving-card {
+  background: var(--bg-card); border: 1px solid var(--border-primary);
+  border-radius: var(--radius-lg); padding: var(--space-5);
+  display: flex; flex-direction: column; gap: var(--space-3);
+  transition: border-color var(--transition-fast);
+}
+.saving-card:hover { border-color: var(--accent-border); }
+.saving-header { display: flex; justify-content: space-between; align-items: center; }
+.saving-name { font-size: var(--text-md); font-weight: var(--weight-semibold); color: var(--text-primary); }
+.saving-pct { font-size: var(--text-lg); font-weight: var(--weight-bold); }
+.saving-amounts { display: flex; justify-content: space-between; font-size: var(--text-xs); color: var(--text-muted); }
+.saving-progress {
+  height: 8px; background: var(--border-primary);
+  border-radius: var(--radius-full); overflow: hidden;
+}
+.saving-progress-bar {
+  height: 100%; border-radius: var(--radius-full);
+  background: linear-gradient(90deg, var(--accent), #06b6d4);
+  transition: width var(--transition-slow);
+}
+.saving-actions { display: flex; align-items: center; gap: var(--space-2); }
+
+/* Investments */
+.invest-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-4); }
+.invest-card {
+  background: var(--bg-card); border: 1px solid var(--border-primary);
+  border-radius: var(--radius-lg); padding: var(--space-5);
+  display: flex; flex-direction: column; gap: var(--space-2);
+  transition: border-color var(--transition-fast);
+}
+.invest-card:hover { border-color: var(--accent-border); }
+.invest-header { display: flex; justify-content: space-between; }
+.invest-name { font-size: var(--text-md); font-weight: var(--weight-semibold); color: var(--text-primary); display: block; }
+.invest-type { font-size: var(--text-xs); color: var(--text-muted); }
+.invest-value { font-size: var(--text-xl); font-weight: var(--weight-bold); color: var(--text-primary); }
+.invest-growth { font-size: var(--text-sm); font-weight: var(--weight-semibold); }
+.invest-growth.positive { color: var(--success); }
+.invest-growth.negative { color: var(--danger); }
+.invest-actions { display: flex; gap: var(--space-2); margin-top: var(--space-2); }
+
+.btn-sm { padding: var(--space-1) var(--space-3); font-size: var(--text-xs); }
