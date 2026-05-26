@@ -45,6 +45,7 @@ type Action =
 const defaultSettings: AppSettings = {
   theme: 'dark', currency: 'RUB', currencySymbol: '₽',
   notifyPayments: true, notifyBudgetExceed: true,
+  budgetStartDate: '',
 };
 
 const initialState: AppState = {

@@ -79,6 +79,7 @@ export interface AppSettings {
   currencySymbol: string;
   notifyPayments: boolean;
   notifyBudgetExceed: boolean;
+  budgetStartDate: string;
 }
 
 export interface Notification {

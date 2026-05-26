@@ -1,6 +1,7 @@
 import { HashRouter, Routes, Route } from 'react-router-dom';
-import { AppProvider } from './store/AppContext';
+import { AppProvider, useApp } from './store/AppContext';
 import AppLayout from './components/Layout/AppLayout';
+import OnboardingModal from './components/OnboardingModal/OnboardingModal';
 import BudgetPage from './pages/BudgetPage/BudgetPage';
 import OperationsPage from './pages/OperationsPage/OperationsPage';
 import AnalyticsPage from './pages/AnalyticsPage/AnalyticsPage';
@@ -9,9 +10,15 @@ import SettingsPage from './pages/SettingsPage/SettingsPage';
 import WhatIfPage from './pages/WhatIfPage/WhatIfPage';
 import ImportPage from './pages/ImportPage/ImportPage';
 
-export default function App() {
+function AppContent() {
+  const { state } = useApp();
+
+  // Show onboarding if settings loaded and no start date set
+  const showOnboarding = !state.loading && !state.error && !state.settings.budgetStartDate;
+
   return (
-    <AppProvider>
+    <>
+      {showOnboarding && <OnboardingModal />}
       <HashRouter>
         <Routes>
           <Route element={<AppLayout />}>
@@ -25,6 +32,14 @@ export default function App() {
           </Route>
         </Routes>
       </HashRouter>
+    </>
+  );
+}
+
+export default function App() {
+  return (
+    <AppProvider>
+      <AppContent />
     </AppProvider>
   );
 }

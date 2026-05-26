@@ -1,5 +1,5 @@
 /**
- * ФинансПро — API client v2.0.0
+ * ФинансПро — API client v2.1.0
  * All REST calls to the FastAPI backend
  */
 
@@ -32,6 +32,7 @@ export interface CategoryResponse {
   name: string;
   type: 'income' | 'expense';
   monthly: number[];
+  monthly_fact: number[];
   sort_order: number;
   parent_id: number | null;
   created_at: string;
@@ -42,6 +43,11 @@ export interface BudgetTableResponse {
   monthly_income: number[];
   monthly_expense: number[];
   monthly_balance: number[];
+  monthly_fact_income: number[];
+  monthly_fact_expense: number[];
+  monthly_fact_balance: number[];
+  weekly_dates: string[];
+  total_profit: number;
 }
 
 export interface ScenarioResponse {
@@ -104,6 +110,7 @@ export interface SettingsResponse {
   currencySymbol: string;
   notifyPayments: boolean;
   notifyBudgetExceed: boolean;
+  budgetStartDate: string;
 }
 
 export interface AnalyticsSummaryResponse {
@@ -141,7 +148,7 @@ export async function createCategory(data: {
 
 export async function updateCategory(
   id: number,
-  data: { name?: string; type?: string; monthly?: number[]; sort_order?: number },
+  data: { name?: string; type?: string; monthly?: number[]; monthly_fact?: number[]; sort_order?: number },
 ): Promise<CategoryResponse> {
   return request(`/categories/${id}`, {
     method: 'PUT',
@@ -175,6 +182,21 @@ export async function updateBudgetCell(
   });
 }
 
+export async function updateBudgetFactCell(
+  categoryId: number,
+  monthIndex: number,
+  value: number,
+): Promise<BudgetTableResponse> {
+  return request('/budget/fact/cell', {
+    method: 'PUT',
+    body: JSON.stringify({
+      category_id: categoryId,
+      month_index: monthIndex,
+      value,
+    }),
+  });
+}
+
 export async function updateCategoryMonthly(
   categoryId: number,
   monthly: number[],
@@ -182,6 +204,23 @@ export async function updateCategoryMonthly(
   return request(`/budget/values/${categoryId}`, {
     method: 'PUT',
     body: JSON.stringify({ monthly }),
+  });
+}
+
+
+// ─── Autofill ────────────────────────────────────────────
+
+export async function autofillBudget(data: {
+  category_id: number;
+  start_week: number;
+  amount: number;
+  period: 'weekly' | 'monthly';
+  count: number;
+  target: 'plan' | 'fact';
+}): Promise<BudgetTableResponse> {
+  return request('/budget/autofill', {
+    method: 'PUT',
+    body: JSON.stringify(data),
   });
 }
 
@@ -211,6 +250,12 @@ export async function deleteScenario(id: number): Promise<void> {
 
 export async function getBudgetWithScenario(scenarioId: number): Promise<BudgetTableResponse> {
   return request(`/budget/scenario/${scenarioId}`);
+}
+
+export async function applyScenario(scenarioId: number): Promise<BudgetTableResponse> {
+  return request(`/scenarios/${scenarioId}/apply`, {
+    method: 'POST',
+  });
 }
 
 
@@ -370,7 +415,11 @@ export async function importFile(file: File): Promise<ImportResponse> {
   const formData = new FormData();
   formData.append('file', file);
 
-  const res = await fetch(`${API_BASE}/import/csv`, {
+  // Choose endpoint based on file extension
+  const ext = file.name.toLowerCase().split('.').pop();
+  const endpoint = ext === 'xlsx' || ext === 'xls' ? '/import/excel' : '/import/csv';
+
+  const res = await fetch(`${API_BASE}${endpoint}`, {
     method: 'POST',
     body: formData,
   });
