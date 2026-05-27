@@ -1,6 +1,8 @@
 /*
 !/finance-app/
+!/backend/
 !.gitignore
+!/README.md
 
 /finance-app/dist_electron/
 /finance-app/dist_installer/
