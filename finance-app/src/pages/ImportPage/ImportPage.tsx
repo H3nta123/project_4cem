@@ -77,7 +77,7 @@ export default function ImportPage() {
             <p className="import-dropzone-hint">или</p>
             <label className="btn btn-primary import-file-btn">
               Выбрать файл
-              <input type="file" accept=".csv,.xlsx,.json" hidden onChange={handleFileInput} />
+              <input type="file" accept=".csv,.xlsx,.xls" hidden onChange={handleFileInput} />
             </label>
             {file && (
               <div className="import-file-info">

@@ -37,6 +37,19 @@ export default function SettingsPage() {
     }
   }
 
+  async function handleStartDateChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const newDate = e.target.value;
+    try {
+      const updated = await api.updateSettings({ budgetStartDate: newDate });
+      dispatch({ type: 'SET_SETTINGS', payload: updated });
+      // Reload budget to recalculate week dates
+      const budget = await api.getBudgetTable();
+      dispatch({ type: 'SET_BUDGET_TABLE', payload: budget });
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
   function handleExport() {
     window.open(api.getExportCsvUrl(), '_blank');
   }
@@ -76,6 +89,22 @@ export default function SettingsPage() {
         <div className="settings-row">
           <span className="settings-row-title">Основная валюта</span>
           <span className="settings-currency-badge">₽Рубль</span>
+        </div>
+      </div>
+
+      <div className="settings-section">
+        <h3 className="settings-section-label">ПЛАНИРОВАНИЕ БЮДЖЕТА</h3>
+        <div className="settings-row">
+          <div className="settings-row-info">
+            <span className="settings-row-title">Дата начала планирования</span>
+            <span className="settings-row-desc">52 недели будут отсчитываться с этой даты</span>
+          </div>
+          <input
+            type="date"
+            className="settings-date-input"
+            value={settings.budgetStartDate || ''}
+            onChange={handleStartDateChange}
+          />
         </div>
       </div>
 

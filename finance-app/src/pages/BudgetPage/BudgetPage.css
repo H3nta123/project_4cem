@@ -292,7 +292,7 @@ td.budget-cat-indent {
 /* Bottom section */
 .budget-bottom {
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
 }
 .budget-chart-section {
@@ -300,6 +300,8 @@ td.budget-cat-indent {
   border: 1px solid var(--border-primary);
   border-radius: 16px;
   padding: 20px;
+  min-width: 0;
+  max-width: 100%;
 }
 .budget-chart-title {
   font-size: 11px; font-weight: 600; letter-spacing: 1px;
@@ -558,4 +560,152 @@ td.budget-cat-indent {
 .btn-sm {
   padding: 4px 10px;
   font-size: 12px;
+}
+
+/* ─── NEW: 4-column summary grid ─────────────────────── */
+
+.summary-cards {
+  grid-template-columns: repeat(4, 1fr);
+}
+
+/* Profit card */
+.summary-card--profit .summary-card-icon {
+  background: rgba(139, 92, 246, 0.15);
+  color: var(--accent);
+}
+.summary-card--profit.positive .summary-card-icon {
+  background: rgba(0, 200, 150, 0.15);
+  color: var(--success);
+}
+.summary-card--profit.negative .summary-card-icon {
+  background: rgba(255, 80, 80, 0.15);
+  color: var(--danger);
+}
+.summary-card--profit.positive .summary-card-value {
+  color: var(--success);
+}
+.summary-card--profit.negative .summary-card-value {
+  color: var(--danger);
+}
+
+/* ─── NEW: Week header with dates ────────────────────── */
+
+.budget-th-week {
+  min-width: 120px;
+}
+.week-header {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: right;
+}
+.week-header-num {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+}
+.week-header-date {
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--accent);
+  letter-spacing: 0;
+  opacity: 0.8;
+}
+
+/* ─── NEW: Both mode (plan + fact in one cell) ───────── */
+
+.both-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.both-plan {
+  font-size: 11px;
+  color: var(--text-muted);
+  opacity: 0.7;
+}
+.both-fact {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.cell-dimmed {
+  opacity: 0.55;
+  font-size: 11px;
+}
+
+.both-legend {
+  display: flex;
+  gap: 16px;
+  padding: 8px 0 0;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.both-legend-plan { color: var(--text-muted); }
+.both-legend-fact { color: var(--text-primary); font-weight: 600; }
+
+/* ─── NEW: Category autofill button ──────────────────── */
+
+.budget-cat-indent {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.cat-name-text {
+  flex: 1;
+}
+.cat-autofill-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  opacity: 0;
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+.budget-row-item:hover .cat-autofill-btn {
+  opacity: 1;
+}
+.cat-autofill-btn:hover {
+  background: var(--accent-light);
+  color: var(--accent);
+}
+
+/* ─── NEW: Autofill modal ────────────────────────────── */
+
+.autofill-modal {
+  width: 440px;
+}
+.autofill-preview {
+  padding: 12px 16px;
+  background: rgba(139, 92, 246, 0.06);
+  border: 1px solid rgba(139, 92, 246, 0.15);
+  border-radius: 10px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+.autofill-preview strong {
+  color: var(--text-primary);
+}
+
+/* ─── NEW: Balance row ───────────────────────────────── */
+
+.budget-row-balance td {
+  border-top: 2px solid var(--border-primary);
+  font-weight: 700;
+}
+
+/* ─── NEW: Scenario save button ──────────────────────── */
+
+.scenario-save-btn {
+  margin-top: 6px;
+  align-self: flex-start;
 }

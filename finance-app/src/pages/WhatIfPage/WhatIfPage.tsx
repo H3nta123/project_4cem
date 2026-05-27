@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useApp, formatMoney } from '../../store/AppContext';
+import { Save } from 'lucide-react';
 import * as api from '../../api/api';
 import type { ScenarioResponse, BudgetTableResponse } from '../../api/api';
 import './WhatIfPage.css';
 
 export default function WhatIfPage() {
-  const { state } = useApp();
+  const { state, dispatch } = useApp();
   const sym = state.settings.currencySymbol;
 
   const [scenarios, setScenarios] = useState<ScenarioResponse[]>(state.scenarios);
@@ -14,6 +15,7 @@ export default function WhatIfPage() {
   const [customName, setCustomName] = useState('');
   const [customInc, setCustomInc] = useState('0');
   const [customExp, setCustomExp] = useState('0');
+  const [applying, setApplying] = useState(false);
 
   useEffect(() => {
     setScenarios(state.scenarios);
@@ -55,6 +57,21 @@ export default function WhatIfPage() {
     }
   };
 
+  const handleApplyToPlan = async () => {
+    if (!activeId) return;
+    setApplying(true);
+    try {
+      const data = await api.applyScenario(activeId);
+      setBudgetData(data);
+      dispatch({ type: 'SET_BUDGET_TABLE', payload: data });
+      setActiveId(null);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setApplying(false);
+    }
+  };
+
   // If scenario is active, show scenario data; otherwise base
   const projIncome = budgetData?.monthly_income[0] ?? 0;
   const projExpense = budgetData?.monthly_expense[0] ?? 0;
@@ -92,6 +109,20 @@ export default function WhatIfPage() {
             </span>
           </div>
         </div>
+
+        {/* Apply scenario to plan button */}
+        {activeId && (
+          <div className="whatif-apply-banner">
+            <span>🎯 Сценарий: <strong>{activeScenario?.name}</strong> — это черновик. Нажмите чтобы перенести в основной план.</span>
+            <button
+              className="btn btn-primary btn-sm"
+              onClick={handleApplyToPlan}
+              disabled={applying}
+            >
+              <Save size={14} /> {applying ? 'Сохранение...' : 'Сохранить в План'}
+            </button>
+          </div>
+        )}
 
         {budgetData && (
           <div className="whatif-comparison">

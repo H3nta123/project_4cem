@@ -100,3 +100,40 @@
 .invest-actions { display: flex; gap: var(--space-2); margin-top: var(--space-2); }
 
 .btn-sm { padding: var(--space-1) var(--space-3); font-size: var(--text-xs); }
+
+/* ─── Profit Card ───────────────────────────────────── */
+
+.fin-profit-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-primary);
+  border-radius: 16px;
+  padding: 20px 24px;
+  transition: border-color 0.2s;
+}
+.fin-profit-card.positive { border-color: var(--success-border); }
+.fin-profit-card.negative { border-color: var(--danger-border); }
+
+.fin-profit-icon {
+  width: 44px; height: 44px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 12px; flex-shrink: 0;
+}
+.fin-profit-card.positive .fin-profit-icon {
+  background: var(--success-light); color: var(--success);
+}
+.fin-profit-card.negative .fin-profit-icon {
+  background: var(--danger-light); color: var(--danger);
+}
+.fin-profit-content { display: flex; flex-direction: column; gap: 2px; }
+.fin-profit-label {
+  font-size: 11px; font-weight: 600; letter-spacing: 0.5px;
+  color: var(--text-muted); text-transform: uppercase;
+}
+.fin-profit-value {
+  font-size: 24px; font-weight: 700;
+}
+.fin-profit-card.positive .fin-profit-value { color: var(--success); }
+.fin-profit-card.negative .fin-profit-value { color: var(--danger); }

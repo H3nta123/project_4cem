@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useApp, formatMoney } from '../../store/AppContext';
-import { Plus, X, CreditCard, PiggyBank, TrendingUp } from 'lucide-react';
+import { Plus, X, CreditCard, PiggyBank, TrendingUp, Award } from 'lucide-react';
 import * as api from '../../api/api';
 import type { FinanceTab } from '../../types';
 import './FinancesPage.css';
@@ -18,6 +18,9 @@ export default function FinancesPage() {
   const { state, dispatch } = useApp();
   const [tab, setTab] = useState<FinanceTab>('loans');
   const sym = state.settings.currencySymbol;
+
+  // Cumulative profit from budget table
+  const totalProfit = state.budgetTable?.total_profit ?? 0;
 
   // ─── Modal state ───
   const [showLoanModal, setShowLoanModal] = useState(false);
@@ -143,6 +146,17 @@ export default function FinancesPage() {
         <div>
           <h1 className="page-title">Финансы</h1>
           <p className="page-subtitle">Кредиты, накопления и инвестиции</p>
+        </div>
+      </div>
+
+      {/* Total Profit Card */}
+      <div className={`fin-profit-card ${totalProfit >= 0 ? 'positive' : 'negative'}`}>
+        <div className="fin-profit-icon">
+          <Award size={22} />
+        </div>
+        <div className="fin-profit-content">
+          <span className="fin-profit-label">ОБЩАЯ ПРИБЫЛЬ (ВСЕ НЕДЕЛИ)</span>
+          <span className="fin-profit-value">{formatMoney(totalProfit, sym)}</span>
         </div>
       </div>
 
