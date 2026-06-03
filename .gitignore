@@ -6,3 +6,7 @@
 
 /finance-app/dist_electron/
 /finance-app/dist_installer/
+/finance-app/dist_electron_packager/
+/finance-app/installer/
+/finance-app/backend/
+/backend/api.spec
