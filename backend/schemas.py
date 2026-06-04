@@ -267,6 +267,7 @@ class SettingsResponse(BaseModel):
     notifyPayments: bool = True
     notifyBudgetExceed: bool = True
     budgetStartDate: str = ""
+    profitAdjustment: float = 0.0
 
 
 class SettingsUpdate(BaseModel):
@@ -276,6 +277,7 @@ class SettingsUpdate(BaseModel):
     notifyPayments: Optional[bool] = None
     notifyBudgetExceed: Optional[bool] = None
     budgetStartDate: Optional[str] = None
+    profitAdjustment: Optional[float] = None
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

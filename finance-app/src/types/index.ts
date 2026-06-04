@@ -80,6 +80,7 @@ export interface AppSettings {
   notifyPayments: boolean;
   notifyBudgetExceed: boolean;
   budgetStartDate: string;
+  profitAdjustment: number;
 }
 
 export interface Notification {

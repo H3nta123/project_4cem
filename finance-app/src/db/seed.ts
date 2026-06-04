@@ -14,6 +14,8 @@ export async function seedDefaultData() {
       currencySymbol: '₽',
       notifyPayments: true,
       notifyBudgetExceed: true,
+      budgetStartDate: '',
+      profitAdjustment: 0,
     });
   }
 
