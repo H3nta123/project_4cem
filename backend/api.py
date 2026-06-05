@@ -178,6 +178,16 @@ def update_budget_values(cat_id: int, data: MonthlyUpdate, db: Session = Depends
     if not cat:
         raise HTTPException(status_code=404, detail="Категория не найдена")
     cat.monthly = json.dumps(data.monthly)
+    
+    # Duplicate to fact
+    monthly_fact = json.loads(cat.monthly_fact) if cat.monthly_fact else []
+    while len(monthly_fact) < len(data.monthly):
+        monthly_fact.append(0)
+    for i, val in enumerate(data.monthly):
+        if i < len(monthly_fact):
+            monthly_fact[i] = val
+    cat.monthly_fact = json.dumps(monthly_fact)
+    
     db.commit()
     db.refresh(cat)
     return _cat_to_dict(cat)
@@ -199,6 +209,13 @@ def update_single_cell(data: BudgetValueUpdate, db: Session = Depends(get_db)):
 
     monthly[data.month_index] = data.value
     cat.monthly = json.dumps(monthly)
+    
+    monthly_fact = json.loads(cat.monthly_fact)
+    while len(monthly_fact) < 52:
+        monthly_fact.append(0)
+    monthly_fact[data.month_index] = data.value
+    cat.monthly_fact = json.dumps(monthly_fact)
+    
     db.commit()
 
     cats = db.query(BudgetCategory).order_by(BudgetCategory.sort_order).all()
@@ -239,6 +256,12 @@ def bulk_update_budget(data: BulkBudgetUpdate, db: Session = Depends(get_db)):
         if 0 <= upd.month_index < len(monthly):
             monthly[upd.month_index] = upd.value
             cat.monthly = json.dumps(monthly)
+            
+            monthly_fact = json.loads(cat.monthly_fact)
+            while len(monthly_fact) < 52:
+                monthly_fact.append(0)
+            monthly_fact[upd.month_index] = upd.value
+            cat.monthly_fact = json.dumps(monthly_fact)
     db.commit()
 
     cats = db.query(BudgetCategory).order_by(BudgetCategory.sort_order).all()
@@ -280,6 +303,18 @@ def autofill_budget(data: AutofillRequest, db: Session = Depends(get_db)):
         cat.monthly_fact = json.dumps(values)
     else:
         cat.monthly = json.dumps(values)
+        
+        # Duplicate to fact
+        monthly_fact = json.loads(cat.monthly_fact) if cat.monthly_fact else []
+        while len(monthly_fact) < 52:
+            monthly_fact.append(0)
+        
+        week = data.start_week
+        for _ in range(data.count):
+            if 0 <= week < 52:
+                monthly_fact[week] = data.amount
+            week += step
+        cat.monthly_fact = json.dumps(monthly_fact)
 
     db.commit()
 
@@ -604,6 +639,7 @@ SETTINGS_DEFAULTS = {
     "notifyPayments": "true",
     "notifyBudgetExceed": "true",
     "budgetStartDate": "",
+    "profitAdjustment": "0.0",
 }
 
 
@@ -620,6 +656,7 @@ def get_settings(db: Session = Depends(get_db)):
         notifyPayments=settings_dict.get("notifyPayments", SETTINGS_DEFAULTS["notifyPayments"]).lower() == "true",
         notifyBudgetExceed=settings_dict.get("notifyBudgetExceed", SETTINGS_DEFAULTS["notifyBudgetExceed"]).lower() == "true",
         budgetStartDate=settings_dict.get("budgetStartDate", SETTINGS_DEFAULTS["budgetStartDate"]),
+        profitAdjustment=float(settings_dict.get("profitAdjustment", SETTINGS_DEFAULTS["profitAdjustment"])),
     )
 
 
