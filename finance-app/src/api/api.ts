@@ -3,9 +3,9 @@
  * All REST calls to the FastAPI backend
  */
 
-// In production the frontend is served by the same FastAPI server,
-// so we use a relative URL. In dev mode (Vite), we proxy to the backend.
-const API_BASE = window.location.port === '5173'
+// In production the frontend is served by the same FastAPI server (if accessed via browser),
+// but when running inside Electron, the protocol is 'file:'. In dev mode (Vite), it's proxy or direct.
+const API_BASE = (window.location.port === '5173' || window.location.protocol === 'file:')
   ? 'http://localhost:8000/api'
   : '/api';
 
@@ -111,6 +111,7 @@ export interface SettingsResponse {
   notifyPayments: boolean;
   notifyBudgetExceed: boolean;
   budgetStartDate: string;
+  profitAdjustment: number;
 }
 
 export interface AnalyticsSummaryResponse {
@@ -204,6 +205,15 @@ export async function updateCategoryMonthly(
   return request(`/budget/values/${categoryId}`, {
     method: 'PUT',
     body: JSON.stringify({ monthly }),
+  });
+}
+
+export async function bulkUpdateBudget(data: {
+  updates: { category_id: number; month_index: number; value: number }[];
+}): Promise<BudgetTableResponse> {
+  return request('/budget/bulk', {
+    method: 'PUT',
+    body: JSON.stringify(data),
   });
 }
 
