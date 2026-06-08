@@ -14,9 +14,25 @@
   },
   "build": {
     "appId": "com.financeapp.desktop",
+    "win": {
+      "target": "nsis",
+      "icon": "dist/vite.svg"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "shortcutName": "FinanceApp"
+    },
     "files": [
       "dist/**/*",
       "main.cjs"
+    ],
+    "extraResources": [
+      {
+        "from": "../backend/dist/api.exe",
+        "to": "backend/api.exe"
+      }
     ],
     "directories": {
       "output": "dist_electron"
