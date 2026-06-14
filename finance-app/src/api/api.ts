@@ -422,14 +422,33 @@ export async function getAnalyticsSummary(): Promise<AnalyticsSummaryResponse> {
 // ─── Import ──────────────────────────────────────────────
 
 export async function importFile(file: File): Promise<ImportResponse> {
+  const ext = file.name.toLowerCase().split('.').pop();
+
+  if (ext === 'pdf') {
+    return importSberPdf(file);
+  }
+
   const formData = new FormData();
   formData.append('file', file);
-
-  // Choose endpoint based on file extension
-  const ext = file.name.toLowerCase().split('.').pop();
   const endpoint = ext === 'xlsx' || ext === 'xls' ? '/import/excel' : '/import/csv';
 
   const res = await fetch(`${API_BASE}${endpoint}`, {
+    method: 'POST',
+    body: formData,
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`API ${res.status}: ${body}`);
+  }
+  return res.json();
+}
+
+
+export async function importSberPdf(file: File): Promise<ImportResponse> {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const res = await fetch(`${API_BASE}/import/sber-pdf`, {
     method: 'POST',
     body: formData,
   });

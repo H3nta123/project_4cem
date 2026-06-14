@@ -77,7 +77,7 @@ export default function ImportPage() {
             <p className="import-dropzone-hint">или</p>
             <label className="btn btn-primary import-file-btn">
               Выбрать файл
-              <input type="file" accept=".csv,.xlsx,.xls" hidden onChange={handleFileInput} />
+              <input type="file" accept=".csv,.xlsx,.xls,.pdf" hidden onChange={handleFileInput} />
             </label>
             {file && (
               <div className="import-file-info">
@@ -94,7 +94,7 @@ export default function ImportPage() {
               Файл <strong>{file?.name}</strong> будет импортирован.
             </p>
             <p className="import-mapping-text">
-              Ожидаемые столбцы: <strong>Дата</strong>, <strong>Категория</strong>, <strong>Описание</strong>, <strong>Сумма</strong>, <strong>Тип</strong>
+              Ожидаемые столбцы: <strong>Категория</strong>, <strong>Тип</strong>, <strong>Нед1</strong>, <strong>Нед2</strong>...
             </p>
             <p className="import-mapping-text" style={{ opacity: 0.7, fontSize: '0.85rem' }}>
               Разделитель: точка с запятой (;) или запятая (,). Кодировка: UTF-8 или Windows-1251.

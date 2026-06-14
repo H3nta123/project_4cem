@@ -6,6 +6,7 @@ investments, savings, loans, settings, import, export, analytics.
 
 import csv
 import io
+import re
 import json
 import logging
 import os
@@ -16,6 +17,7 @@ from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
+from pypdf import PdfReader
 from sqlalchemy.orm import Session
 
 from database import (
@@ -736,19 +738,16 @@ def get_analytics_summary(db: Session = Depends(get_db)):
 
 @app.post("/api/import/csv", response_model=ImportResponse)
 async def import_csv(
-    file: UploadFile = File(...),
-    db: Session = Depends(get_db),
+        file: UploadFile = File(...),
+        db: Session = Depends(get_db),
 ):
-    """Import transactions from a CSV file.
-    Expected columns: date, category, description, amount, type (income/expense).
-    """
+    """Import budget table from CSV."""
     imported = 0
     skipped = 0
     errors: list[str] = []
 
     try:
         content = await file.read()
-        # Try UTF-8-BOM, then UTF-8, then cp1251 (Cyrillic Windows)
         for encoding in ['utf-8-sig', 'utf-8', 'cp1251']:
             try:
                 text = content.decode(encoding)
@@ -758,54 +757,83 @@ async def import_csv(
         else:
             return ImportResponse(imported=0, skipped=0, errors=["Не удалось определить кодировку файла"])
 
-        # Detect delimiter
         first_line = text.split('\n')[0]
         delimiter = ';' if ';' in first_line else ','
 
-        reader = csv.DictReader(io.StringIO(text), delimiter=delimiter)
+        reader = csv.reader(io.StringIO(text), delimiter=delimiter)
+        rows = list(reader)
+        if not rows or len(rows) < 2:
+            return ImportResponse(imported=0, skipped=0, errors=["Файл пуст или некорректен"])
 
-        # Map Russian / English column names
-        FIELD_MAP = {
-            'дата': 'date', 'date': 'date',
-            'категория': 'category', 'category': 'category',
-            'описание': 'description', 'description': 'description',
-            'сумма': 'amount', 'amount': 'amount',
-            'тип': 'type', 'type': 'type',
-        }
+        headers = [h.strip().lower() for h in rows[0]]
 
-        for i, row in enumerate(reader, start=2):
+        if "категория" not in headers or "тип" not in headers or "показатель" not in headers:
+            return ImportResponse(
+                imported=0, skipped=0,
+                errors=["Файл не является экспортом бюджета (отсутствуют колонки 'Категория', 'Тип' или 'Показатель')"]
+            )
+
+        cat_idx = headers.index("категория")
+        type_idx = headers.index("тип")
+        metric_idx = headers.index("показатель")
+
+        week_cols = {}
+        for idx, h in enumerate(headers):
+            if h.startswith("нед"):
+                try:
+                    week_num = int(h.replace("нед", ""))
+                    if 1 <= week_num <= 52:
+                        week_cols[week_num - 1] = idx
+                except ValueError:
+                    continue
+
+        for i, row in enumerate(rows[1:], start=2):
             try:
-                # Normalize field names
-                normalized = {}
-                for k, v in row.items():
-                    if k is None:
-                        continue
-                    key_lower = k.strip().lower()
-                    mapped = FIELD_MAP.get(key_lower)
-                    if mapped:
-                        normalized[mapped] = v.strip() if v else ""
+                if not row or len(row) < 3:
+                    continue
 
-                if 'date' not in normalized or 'amount' not in normalized:
+                cat_name = row[cat_idx].strip()
+                type_str = row[type_idx].strip().lower()
+                metric_str = row[metric_idx].strip().lower()
+
+                if not cat_name:
                     skipped += 1
                     continue
 
-                amount = float(normalized['amount'].replace(',', '.').replace(' ', ''))
-                tx_type = normalized.get('type', '').lower()
-                if tx_type in ('доход', 'income'):
-                    tx_type = 'income'
-                elif tx_type in ('расход', 'expense'):
-                    tx_type = 'expense'
-                else:
-                    tx_type = 'expense' if amount < 0 else 'income'
+                db_type = "income" if type_str in ("доход", "income") else "expense"
 
-                tx = Transaction(
-                    date=normalized.get('date', ''),
-                    category=normalized.get('category', 'Без категории'),
-                    description=normalized.get('description', ''),
-                    amount=abs(amount),
-                    type=tx_type,
-                )
-                db.add(tx)
+                values = [0.0] * 52
+                for week_idx, file_col_idx in week_cols.items():
+                    if file_col_idx < len(row):
+                        val_str = str(row[file_col_idx]).strip()
+                        if val_str:
+                            try:
+                                values[week_idx] = float(val_str.replace(',', '.').replace(' ', ''))
+                            except ValueError:
+                                pass
+
+                existing = db.query(BudgetCategory).filter(
+                    BudgetCategory.name == cat_name,
+                    BudgetCategory.type == db_type
+                ).first()
+
+                if existing:
+                    if metric_str in ("план", "plan"):
+                        existing.monthly = json.dumps(values)
+                    elif metric_str in ("факт", "fact"):
+                        existing.monthly_fact = json.dumps(values)
+                else:
+                    new_monthly = json.dumps(values) if metric_str in ("план", "plan") else json.dumps([0.0] * 52)
+                    new_monthly_fact = json.dumps(values) if metric_str in ("факт", "fact") else json.dumps([0.0] * 52)
+
+                    new_cat = BudgetCategory(
+                        name=cat_name,
+                        type=db_type,
+                        monthly=new_monthly,
+                        monthly_fact=new_monthly_fact,
+                        sort_order=i,
+                    )
+                    db.add(new_cat)
                 imported += 1
 
             except Exception as e:
@@ -813,117 +841,238 @@ async def import_csv(
                 skipped += 1
 
         db.commit()
-        logger.info(f"Import complete: {imported} imported, {skipped} skipped")
 
     except Exception as e:
-        errors.append(f"Ошибка чтения файла: {str(e)}")
+        errors.append(f"Ошибка при импорте CSV: {str(e)}")
 
     return ImportResponse(imported=imported, skipped=skipped, errors=errors)
 
 
 @app.post("/api/import/excel", response_model=ImportResponse)
 async def import_excel(
-    file: UploadFile = File(...),
-    db: Session = Depends(get_db),
+        file: UploadFile = File(...),
+        db: Session = Depends(get_db),
 ):
-    """Import transactions from an Excel (.xlsx) file.
-    Expected columns: Дата/Date, Категория/Category, Описание/Description, Сумма/Amount, Тип/Type.
-    """
+    """Import budget table from Excel."""
     imported = 0
     skipped = 0
     errors: list[str] = []
 
     try:
         from openpyxl import load_workbook
+    except ImportError:
+        return ImportResponse(imported=0, skipped=0, errors=["Библиотека openpyxl не установлена"])
 
+    try:
         content = await file.read()
-        wb = load_workbook(filename=io.BytesIO(content), read_only=True, data_only=True)
-        ws = wb.active
-        if ws is None:
-            return ImportResponse(imported=0, skipped=0, errors=["Не удалось открыть лист Excel"])
+        with load_workbook(filename=io.BytesIO(content), read_only=True, data_only=True) as wb:
+            ws = wb.active
+            if ws is None:
+                return ImportResponse(imported=0, skipped=0, errors=["Не удалось открыть лист Excel"])
 
-        rows = list(ws.iter_rows(values_only=True))
-        if len(rows) < 2:
-            return ImportResponse(imported=0, skipped=0, errors=["Файл пуст или содержит только заголовки"])
+            rows = list(ws.iter_rows(values_only=True))
+            if len(rows) < 2:
+                return ImportResponse(imported=0, skipped=0, errors=["Файл пуст или содержит мало данных"])
 
-        # Map header row
-        FIELD_MAP = {
-            'дата': 'date', 'date': 'date',
-            'категория': 'category', 'category': 'category',
-            'описание': 'description', 'description': 'description',
-            'сумма': 'amount', 'amount': 'amount',
-            'тип': 'type', 'type': 'type',
-        }
+            headers = []
+            header_idx = -1
 
-        header_row = rows[0]
-        col_map = {}
-        for idx, cell in enumerate(header_row):
-            if cell is not None:
-                key = str(cell).strip().lower()
-                mapped = FIELD_MAP.get(key)
-                if mapped:
-                    col_map[mapped] = idx
+            for r_idx in range(min(10, len(rows))):
+                row_cells = [str(c).strip().lower() if c is not None else "" for c in rows[r_idx]]
+                if "категория" in row_cells and "тип" in row_cells and "показатель" in row_cells:
+                    headers = row_cells
+                    header_idx = r_idx
+                    break
 
-        if 'date' not in col_map or 'amount' not in col_map:
-            return ImportResponse(imported=0, skipped=0, errors=[
-                f"Не найдены обязательные столбцы 'Дата' и 'Сумма'. Найденные: {[str(c) for c in header_row if c]}"
-            ])
+            if header_idx == -1:
+                return ImportResponse(imported=0, skipped=0, errors=[
+                    "Не удалось найти строку заголовков с обязательными столбцами 'Категория', 'Тип' и 'Показатель'"
+                ])
 
-        for i, row in enumerate(rows[1:], start=2):
+            cat_idx = headers.index("категория")
+            type_idx = headers.index("тип")
+            metric_idx = headers.index("показатель")
+
+            week_cols = {}
+            for idx, h in enumerate(headers):
+                if h.startswith("нед"):
+                    try:
+                        week_num = int(h.replace("нед", ""))
+                        if 1 <= week_num <= 52:
+                            week_cols[week_num - 1] = idx
+                    except ValueError:
+                        continue
+
+            for i, row in enumerate(rows[header_idx + 1:], start=header_idx + 2):
+                try:
+                    if not any(cell is not None for cell in row):
+                        continue
+
+                    def get_cell_str(idx):
+                        return str(row[idx]).strip() if idx is not None and idx < len(row) and row[
+                            idx] is not None else ""
+
+                    cat_name = get_cell_str(cat_idx)
+                    type_str = get_cell_str(type_idx).lower()
+                    metric_str = get_cell_str(metric_idx).lower()
+
+                    if not cat_name:
+                        skipped += 1
+                        continue
+
+                    db_type = "income" if type_str in ("доход", "income") else "expense"
+
+                    values = [0.0] * 52
+                    for week_idx, file_col_idx in week_cols.items():
+                        val_str = get_cell_str(file_col_idx)
+                        if val_str:
+                            try:
+                                values[week_idx] = float(val_str.replace(',', '.').replace(' ', ''))
+                            except ValueError:
+                                pass
+
+                    existing = db.query(BudgetCategory).filter(
+                        BudgetCategory.name == cat_name,
+                        BudgetCategory.type == db_type
+                    ).first()
+
+                    if existing:
+                        if metric_str in ("план", "plan"):
+                            existing.monthly = json.dumps(values)
+                        elif metric_str in ("факт", "fact"):
+                            existing.monthly_fact = json.dumps(values)
+                    else:
+                        new_monthly = json.dumps(values) if metric_str in ("план", "plan") else json.dumps([0.0] * 52)
+                        new_monthly_fact = json.dumps(values) if metric_str in ("факт", "fact") else json.dumps(
+                            [0.0] * 52)
+
+                        new_cat = BudgetCategory(
+                            name=cat_name,
+                            type=db_type,
+                            monthly=new_monthly,
+                            monthly_fact=new_monthly_fact,
+                            sort_order=i,
+                        )
+                        db.add(new_cat)
+                    imported += 1
+
+                except Exception as e:
+                    errors.append(f"Строка {i}: {str(e)}")
+                    skipped += 1
+
+            db.commit()
+
+    except Exception as e:
+        errors.append(f"Ошибка при импорте Excel: {str(e)}")
+
+    return ImportResponse(imported=imported, skipped=skipped, errors=errors)
+
+
+@app.post("/api/import/sber-pdf", response_model=ImportResponse)
+async def import_sber_pdf(
+        file: UploadFile = File(...),
+        db: Session = Depends(get_db),
+):
+    """Import transactions directly from Sberbank PDF statements."""
+    imported = 0
+    skipped = 0
+    errors: list[str] = []
+
+    try:
+        content = await file.read()
+        pdf_file = io.BytesIO(content)
+        reader = PdfReader(pdf_file)
+
+        tx_header_re = re.compile(
+            r"^(\d{2}\.\d{2}\.\d{4})\s+(\d{2}:\d{2})\s+(.+?)\s+([+-]?\s*[\d\s]+,\d{2})\s+([\d\s]+,\d{2})$"
+        )
+
+        tx_detail_re = re.compile(
+            r"^(\d{2}\.\d{2}\.\d{4})\s+(\d{6})\s+(.+)$"
+        )
+
+        parsed_transactions = []
+        current_tx = None
+
+        for page in reader.pages:
+            text = page.extract_text()
+            if not text:
+                continue
+
+            lines = text.split("\n")
+            for line in lines:
+                line = line.strip()
+
+                match_header = tx_header_re.match(line)
+                if match_header:
+                    if current_tx:
+                        parsed_transactions.append(current_tx)
+
+                    date_str, time_str, category, amount_str, _ = match_header.groups()
+                    current_tx = {
+                        "date": date_str,
+                        "time": time_str,
+                        "category": category.strip(),
+                        "amount_str": amount_str.strip(),
+                        "description": "",
+                    }
+                    continue
+
+                match_detail = tx_detail_re.match(line)
+                if match_detail:
+                    date_str, _, description = match_detail.groups()
+                    if current_tx and current_tx["date"] == date_str:
+                        current_tx["description"] = description.strip()
+                        parsed_transactions.append(current_tx)
+                        current_tx = None
+                    continue
+
+        if current_tx:
+            parsed_transactions.append(current_tx)
+
+        for tx_data in parsed_transactions:
             try:
-                date_val = row[col_map['date']] if 'date' in col_map else None
-                amount_val = row[col_map['amount']] if 'amount' in col_map else None
+                day, month, year = tx_data["date"].split(".")
+                iso_date = f"{year}-{month}-{day}"
 
-                if date_val is None or amount_val is None:
+                clean_amount_str = tx_data["amount_str"].replace("\xa0", "").replace(" ", "").replace(",", ".")
+
+                if clean_amount_str.startswith("+"):
+                    tx_type = "income"
+                    amount = float(clean_amount_str.replace("+", ""))
+                else:
+                    tx_type = "expense"
+                    amount = float(clean_amount_str)
+
+                exists = db.query(Transaction).filter(
+                    Transaction.date == iso_date,
+                    Transaction.amount == amount,
+                    Transaction.category == tx_data["category"],
+                    Transaction.description == tx_data["description"]
+                ).first()
+
+                if exists:
                     skipped += 1
                     continue
 
-                # Convert date
-                if hasattr(date_val, 'strftime'):
-                    date_str = date_val.strftime('%Y-%m-%d')
-                else:
-                    date_str = str(date_val).strip()
-
-                # Convert amount
-                if isinstance(amount_val, (int, float)):
-                    amount = float(amount_val)
-                else:
-                    amount = float(str(amount_val).replace(',', '.').replace(' ', ''))
-
-                # Get optional fields
-                category = str(row[col_map['category']]).strip() if 'category' in col_map and row[col_map['category']] else 'Без категории'
-                description = str(row[col_map['description']]).strip() if 'description' in col_map and row[col_map['description']] else ''
-
-                tx_type_raw = str(row[col_map['type']]).strip().lower() if 'type' in col_map and row[col_map['type']] else ''
-                if tx_type_raw in ('доход', 'income'):
-                    tx_type = 'income'
-                elif tx_type_raw in ('расход', 'expense'):
-                    tx_type = 'expense'
-                else:
-                    tx_type = 'expense' if amount < 0 else 'income'
-
-                tx = Transaction(
-                    date=date_str,
-                    category=category,
-                    description=description,
-                    amount=abs(amount),
+                new_tx = Transaction(
+                    date=iso_date,
+                    category=tx_data["category"],
+                    description=tx_data["description"] or f"Операция {tx_data['category']}",
+                    amount=amount,
                     type=tx_type,
                 )
-                db.add(tx)
+                db.add(new_tx)
                 imported += 1
 
-            except Exception as e:
-                errors.append(f"Строка {i}: {str(e)}")
+            except Exception as row_err:
+                errors.append(f"Ошибка при обработке строки за {tx_data.get('date')}: {str(row_err)}")
                 skipped += 1
 
         db.commit()
-        wb.close()
-        logger.info(f"Excel import complete: {imported} imported, {skipped} skipped")
 
-    except ImportError:
-        errors.append("Библиотека openpyxl не установлена. Установите: pip install openpyxl")
     except Exception as e:
-        errors.append(f"Ошибка чтения файла: {str(e)}")
+        errors.append(f"Не удалось обработать PDF-файл: {str(e)}")
 
     return ImportResponse(imported=imported, skipped=skipped, errors=errors)
 
@@ -940,15 +1089,23 @@ def export_csv(db: Session = Depends(get_db)):
     output = io.StringIO()
     writer = csv.writer(output, delimiter=';')
 
-    headers = ["Категория", "Тип"] + [f"Нед{i + 1}" for i in range(52)]
+    headers = ["Категория", "Тип", "Показатель"] + [f"Нед{i + 1}" for i in range(52)]
     writer.writerow(headers)
 
     for cat in cats:
-        monthly = json.loads(cat.monthly)
         type_label = "Доход" if cat.type == "income" else "Расход"
-        writer.writerow([cat.name, type_label] + monthly)
 
-    # Encode with UTF-8 BOM so Excel auto-detects Cyrillic correctly
+        monthly_plan = json.loads(cat.monthly) if cat.monthly else [0.0] * 52
+        while len(monthly_plan) < 52:
+            monthly_plan.append(0.0)
+
+        monthly_fact = json.loads(cat.monthly_fact) if cat.monthly_fact else [0.0] * 52
+        while len(monthly_fact) < 52:
+            monthly_fact.append(0.0)
+
+        writer.writerow([cat.name, type_label, "План"] + monthly_plan)
+        writer.writerow([cat.name, type_label, "Факт"] + monthly_fact)
+
     csv_text = output.getvalue()
     bom = b'\xef\xbb\xbf'
     csv_bytes = bom + csv_text.encode('utf-8')
