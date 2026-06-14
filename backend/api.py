@@ -17,6 +17,7 @@ from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
+from openpyxl import load_workbook
 from pypdf import PdfReader
 from sqlalchemy.orm import Session
 
@@ -857,11 +858,6 @@ async def import_excel(
     imported = 0
     skipped = 0
     errors: list[str] = []
-
-    try:
-        from openpyxl import load_workbook
-    except ImportError:
-        return ImportResponse(imported=0, skipped=0, errors=["Библиотека openpyxl не установлена"])
 
     try:
         content = await file.read()
