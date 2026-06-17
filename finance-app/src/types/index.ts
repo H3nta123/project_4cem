@@ -29,17 +29,7 @@ export interface BudgetData {
   mode: 'plan' | 'fact' | 'both';
 }
 
-export interface Investment {
-  id: string;
-  name: string;
-  type: 'stocks' | 'bonds' | 'crypto' | 'fund' | 'metals' | 'other';
-  typeLabel: string;     // human-readable: "Акции", "Облигации", etc.
-  value: number;
-  purchasePrice: number;
-  growth: number;        // percentage
-  quantity?: number;
-  createdAt: string;
-}
+
 
 export interface SavingsGoal {
   id: string;
@@ -62,16 +52,7 @@ export interface Loan {
   createdAt: string;
 }
 
-export type ScenarioType = 'base' | 'optimistic' | 'pessimistic' | 'aggressive' | 'custom';
 
-export interface Scenario {
-  id: string;
-  name: string;
-  type: ScenarioType;
-  incomeModifier: number;   // multiplier, e.g. 1.1 for +10%
-  expenseModifier: number;
-  description?: string;
-}
 
 export interface AppSettings {
   theme: 'dark' | 'light';
@@ -98,8 +79,7 @@ export type ActivePage =
   | 'analytics'
   | 'finances'
   | 'settings'
-  | 'import'
-  | 'whatif';
+  | 'import';
 
-export type FinanceTab = 'loans' | 'savings' | 'investments';
+export type FinanceTab = 'loans' | 'savings';
 export type OperationsFilter = 'all' | 'income' | 'expense';

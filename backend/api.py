@@ -68,6 +68,10 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:5173",
         "http://127.0.0.1:5173",
+        "http://localhost:5174",
+        "http://127.0.0.1:5174",
+        "http://localhost:5175",
+        "http://127.0.0.1:5175",
         "http://localhost:3000",
     ],
     allow_credentials=True,
@@ -522,15 +526,27 @@ def get_savings(db: Session = Depends(get_db)):
 @app.post("/api/savings", response_model=SavingsGoalResponse, status_code=201)
 def create_saving(data: SavingsGoalCreate, db: Session = Depends(get_db)):
     """Create a new savings goal."""
+    cat = BudgetCategory(
+        name=f"Копилка: {data.name}",
+        type="expense",
+        monthly="[" + ",".join(["0.0"]*52) + "]",
+        monthly_fact="[" + ",".join(["0.0"]*52) + "]",
+        sort_order=9999
+    )
+    db.add(cat)
+    db.commit()
+    db.refresh(cat)
+
     goal = SavingsGoal(
         name=data.name,
         target=data.target,
         current=data.current,
+        category_id=cat.id,
     )
     db.add(goal)
     db.commit()
     db.refresh(goal)
-    logger.info(f"Created savings goal: {goal.name}")
+    logger.info(f"Created savings goal: {goal.name} with category_id: {cat.id}")
     return goal
 
 
@@ -559,15 +575,97 @@ def delete_saving(goal_id: int, db: Session = Depends(get_db)):
     goal = db.query(SavingsGoal).filter(SavingsGoal.id == goal_id).first()
     if not goal:
         raise HTTPException(status_code=404, detail="Цель не найдена")
+    if goal.category_id:
+        cat = db.query(BudgetCategory).filter(BudgetCategory.id == goal.category_id).first()
+        if cat:
+            db.delete(cat)
     db.delete(goal)
     db.commit()
     logger.info(f"Deleted savings goal id={goal_id}")
+
+from schemas import SavingsGoalTopUp
+
+@app.post("/api/savings/{goal_id}/topup", response_model=SavingsGoalResponse)
+def topup_saving(goal_id: int, data: SavingsGoalTopUp, db: Session = Depends(get_db)):
+    """Top up a savings goal and record the expense in the budget."""
+    goal = db.query(SavingsGoal).filter(SavingsGoal.id == goal_id).first()
+    if not goal:
+        raise HTTPException(status_code=404, detail="Цель не найдена")
+
+    goal.current += data.amount
+
+    if goal.category_id:
+        cat = db.query(BudgetCategory).filter(BudgetCategory.id == goal.category_id).first()
+        if cat:
+            curr_idx = _get_current_week_index(db)
+            fact_plan = json.loads(cat.monthly_fact) if cat.monthly_fact else [0.0]*52
+            while len(fact_plan) < 52: fact_plan.append(0.0)
+            fact_plan[curr_idx] += data.amount
+            cat.monthly_fact = json.dumps(fact_plan)
+
+    db.commit()
+    db.refresh(goal)
+    return goal
+
+@app.post("/api/savings/{goal_id}/withdraw", response_model=SavingsGoalResponse)
+def withdraw_saving(goal_id: int, data: SavingsGoalTopUp, db: Session = Depends(get_db)):
+    """Withdraw from a savings goal and record the negative expense in the budget."""
+    goal = db.query(SavingsGoal).filter(SavingsGoal.id == goal_id).first()
+    if not goal:
+        raise HTTPException(status_code=404, detail="Цель не найдена")
+
+    if data.amount > goal.current:
+        raise HTTPException(status_code=400, detail="Недостаточно средств в копилке")
+
+    goal.current -= data.amount
+
+    if goal.category_id:
+        cat = db.query(BudgetCategory).filter(BudgetCategory.id == goal.category_id).first()
+        if cat:
+            curr_idx = _get_current_week_index(db)
+            fact_plan = json.loads(cat.monthly_fact) if cat.monthly_fact else [0.0]*52
+            while len(fact_plan) < 52: fact_plan.append(0.0)
+            fact_plan[curr_idx] -= data.amount
+            cat.monthly_fact = json.dumps(fact_plan)
+
+    db.commit()
+    db.refresh(goal)
+    return goal
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #  LOANS
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
+def _generate_loan_plan(total: float, payment: float, payment_type: str, start_index: int = 0) -> list[float]:
+    plan = [0.0] * 52
+    if payment <= 0 or total <= 0: return plan
+    remaining = total
+    if payment_type == "weekly":
+        for i in range(start_index, 52):
+            if remaining <= 0: break
+            pay = min(payment, remaining)
+            plan[i] = pay
+            remaining -= pay
+    else:
+        for i in range(0, 52, 4):
+            if i < start_index: continue
+            if remaining <= 0: break
+            pay = min(payment, remaining)
+            plan[i] = pay
+            remaining -= pay
+    return plan
+
+def _get_current_week_index(db: Session) -> int:
+    dates = _get_weekly_dates(db)
+    today = datetime.now().strftime("%Y-%m-%d")
+    idx = 0
+    for i, d in enumerate(dates):
+        if today >= d:
+            idx = i
+        else:
+            break
+    return idx
 
 @app.get("/api/loans", response_model=list[LoanResponse])
 def get_loans(db: Session = Depends(get_db)):
@@ -577,7 +675,21 @@ def get_loans(db: Session = Depends(get_db)):
 
 @app.post("/api/loans", response_model=LoanResponse, status_code=201)
 def create_loan(data: LoanCreate, db: Session = Depends(get_db)):
-    """Create a new loan."""
+    """Create a new loan and its budget category."""
+    curr_idx = _get_current_week_index(db)
+    plan = _generate_loan_plan(data.total_amount, data.monthly_payment, data.payment_type, curr_idx)
+    
+    cat = BudgetCategory(
+        name=f"Кредит: {data.name}",
+        type="expense",
+        monthly=json.dumps(plan),
+        monthly_fact="[" + ",".join(["0.0"]*52) + "]",
+        sort_order=9999
+    )
+    db.add(cat)
+    db.commit()
+    db.refresh(cat)
+
     loan = Loan(
         name=data.name,
         total_amount=data.total_amount,
@@ -587,11 +699,13 @@ def create_loan(data: LoanCreate, db: Session = Depends(get_db)):
         start_date=data.start_date,
         end_date=data.end_date,
         status=data.status.value,
+        payment_type=data.payment_type,
+        category_id=cat.id,
     )
     db.add(loan)
     db.commit()
     db.refresh(loan)
-    logger.info(f"Created loan: {loan.name}")
+    logger.info(f"Created loan: {loan.name} with category_id: {cat.id}")
     return loan
 
 
@@ -604,16 +718,46 @@ def update_loan(loan_id: int, data: LoanUpdate, db: Session = Depends(get_db)):
 
     if data.name is not None:
         loan.name = data.name
+        if loan.category_id:
+            cat = db.query(BudgetCategory).filter(BudgetCategory.id == loan.category_id).first()
+            if cat:
+                cat.name = f"Кредит: {data.name}"
     if data.paid_amount is not None:
         loan.paid_amount = data.paid_amount
     if data.monthly_payment is not None:
         loan.monthly_payment = data.monthly_payment
     if data.status is not None:
         loan.status = data.status.value
+    if getattr(data, 'payment_type', None) is not None:
+        loan.payment_type = data.payment_type
+
+    # Update category plan if payment or type changed
+    if data.monthly_payment is not None or getattr(data, 'payment_type', None) is not None:
+        if loan.category_id:
+            cat = db.query(BudgetCategory).filter(BudgetCategory.id == loan.category_id).first()
+            if cat:
+                new_plan = _generate_loan_plan(loan.monthly_payment, loan.payment_type)
+                # only update future plan if not completed? For now update full plan.
+                if loan.status == "completed":
+                    curr_idx = _get_current_week_index(db)
+                    plan = json.loads(cat.monthly)
+                    for i in range(curr_idx, 52):
+                        plan[i] = 0.0
+                    cat.monthly = json.dumps(plan)
+                else:
+                    cat.monthly = json.dumps(new_plan)
 
     # Auto-complete if fully paid
     if loan.paid_amount >= loan.total_amount:
         loan.status = "completed"
+        if loan.category_id:
+            cat = db.query(BudgetCategory).filter(BudgetCategory.id == loan.category_id).first()
+            if cat:
+                curr_idx = _get_current_week_index(db)
+                plan = json.loads(cat.monthly)
+                for i in range(curr_idx, 52):
+                    plan[i] = 0.0
+                cat.monthly = json.dumps(plan)
 
     db.commit()
     db.refresh(loan)
@@ -626,9 +770,66 @@ def delete_loan(loan_id: int, db: Session = Depends(get_db)):
     loan = db.query(Loan).filter(Loan.id == loan_id).first()
     if not loan:
         raise HTTPException(status_code=404, detail="Кредит не найден")
+    if loan.category_id:
+        cat = db.query(BudgetCategory).filter(BudgetCategory.id == loan.category_id).first()
+        if cat:
+            db.delete(cat)
     db.delete(loan)
     db.commit()
     logger.info(f"Deleted loan id={loan_id}")
+
+from schemas import LoanPay
+
+@app.post("/api/loans/{loan_id}/pay", response_model=LoanResponse)
+def pay_loan(loan_id: int, data: LoanPay, db: Session = Depends(get_db)):
+    """Make a payment on a loan and record it in the budget."""
+    loan = db.query(Loan).filter(Loan.id == loan_id).first()
+    if not loan:
+        raise HTTPException(status_code=404, detail="Кредит не найден")
+
+    loan.paid_amount += data.amount
+    if loan.paid_amount >= loan.total_amount:
+        loan.status = "completed"
+
+    if loan.category_id:
+        cat = db.query(BudgetCategory).filter(BudgetCategory.id == loan.category_id).first()
+        if cat:
+            curr_idx = _get_current_week_index(db)
+            fact_plan = json.loads(cat.monthly_fact) if cat.monthly_fact else [0.0]*52
+            while len(fact_plan) < 52: fact_plan.append(0.0)
+            fact_plan[curr_idx] += data.amount
+            cat.monthly_fact = json.dumps(fact_plan)
+
+            remaining = loan.total_amount - loan.paid_amount
+            old_plan = json.loads(cat.monthly) if cat.monthly else [0.0]*52
+            while len(old_plan) < 52: old_plan.append(0.0)
+            new_plan = [0.0] * 52
+            
+            # Keep the past plan unmodified
+            for i in range(curr_idx + 1):
+                new_plan[i] = old_plan[i]
+                
+            # Recalculate future plan
+            if remaining > 0:
+                if loan.payment_type == "weekly":
+                    for i in range(curr_idx + 1, 52):
+                        if remaining <= 0: break
+                        pay = min(loan.monthly_payment, remaining)
+                        new_plan[i] = pay
+                        remaining -= pay
+                else:
+                    for i in range(0, 52, 4):
+                        if i <= curr_idx: continue
+                        if remaining <= 0: break
+                        pay = min(loan.monthly_payment, remaining)
+                        new_plan[i] = pay
+                        remaining -= pay
+                        
+            cat.monthly = json.dumps(new_plan)
+
+    db.commit()
+    db.refresh(loan)
+    return loan
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -1229,7 +1430,31 @@ def _build_budget_response(
     monthly_balance = [monthly_income[i] - monthly_expense[i] for i in range(52)]
     monthly_fact_balance = [monthly_fact_income[i] - monthly_fact_expense[i] for i in range(52)]
 
-    # Total profit = sum of all weekly balances
+    weekly_remainder = [0.0] * 52
+    weekly_wallet_total = [0.0] * 52
+    weekly_cumulative_balance = [0.0] * 52
+    
+    weekly_fact_remainder = [0.0] * 52
+    weekly_fact_wallet_total = [0.0] * 52
+    weekly_fact_cumulative_balance = [0.0] * 52
+
+    # Calculate cumulative balances for Plan
+    curr_rem = 0.0
+    for i in range(52):
+        weekly_remainder[i] = curr_rem
+        weekly_wallet_total[i] = curr_rem + monthly_income[i]
+        weekly_cumulative_balance[i] = weekly_wallet_total[i] - monthly_expense[i]
+        curr_rem = weekly_cumulative_balance[i]
+
+    # Calculate cumulative balances for Fact
+    curr_fact_rem = 0.0
+    for i in range(52):
+        weekly_fact_remainder[i] = curr_fact_rem
+        weekly_fact_wallet_total[i] = curr_fact_rem + monthly_fact_income[i]
+        weekly_fact_cumulative_balance[i] = weekly_fact_wallet_total[i] - monthly_fact_expense[i]
+        curr_fact_rem = weekly_fact_cumulative_balance[i]
+
+    # Total profit = sum of all weekly balances (unchanged logic to keep compatibility, or we could use the final cumulative balance)
     total_profit = sum(monthly_balance)
 
     # Weekly dates
@@ -1245,6 +1470,12 @@ def _build_budget_response(
         "monthly_fact_balance": monthly_fact_balance,
         "weekly_dates": weekly_dates,
         "total_profit": total_profit,
+        "weekly_remainder": weekly_remainder,
+        "weekly_wallet_total": weekly_wallet_total,
+        "weekly_cumulative_balance": weekly_cumulative_balance,
+        "weekly_fact_remainder": weekly_fact_remainder,
+        "weekly_fact_wallet_total": weekly_fact_wallet_total,
+        "weekly_fact_cumulative_balance": weekly_fact_cumulative_balance,
     }
 
 

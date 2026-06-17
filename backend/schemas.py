@@ -131,6 +131,13 @@ class BudgetTableResponse(BaseModel):
     monthly_fact_balance: list[float]
     weekly_dates: list[str]     # ISO dates for start of each week
     total_profit: float         # cumulative balance over all weeks
+    # Cumulative balance fields
+    weekly_remainder: list[float]       # остаток с прошлой недели
+    weekly_wallet_total: list[float]    # итого в кошельке
+    weekly_cumulative_balance: list[float]  # накопительный баланс
+    weekly_fact_remainder: list[float]
+    weekly_fact_wallet_total: list[float]
+    weekly_fact_cumulative_balance: list[float]
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -209,11 +216,17 @@ class SavingsGoalUpdate(BaseModel):
     target: Optional[float] = None
 
 
+class SavingsGoalTopUp(BaseModel):
+    amount: float
+    week_index: Optional[int] = None
+
+
 class SavingsGoalResponse(BaseModel):
     id: int
     name: str
     current: float
     target: float
+    category_id: Optional[int] = None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
@@ -232,6 +245,7 @@ class LoanCreate(BaseModel):
     start_date: Optional[str] = None
     end_date: Optional[str] = None
     status: LoanStatus = LoanStatus.active
+    payment_type: str = "monthly"  # "weekly" or "monthly"
 
 
 class LoanUpdate(BaseModel):
@@ -240,6 +254,10 @@ class LoanUpdate(BaseModel):
     monthly_payment: Optional[float] = None
     status: Optional[LoanStatus] = None
 
+
+class LoanPay(BaseModel):
+    amount: float
+    week_index: Optional[int] = None
 
 class LoanResponse(BaseModel):
     id: int
@@ -251,6 +269,8 @@ class LoanResponse(BaseModel):
     start_date: Optional[str] = None
     end_date: Optional[str] = None
     status: str
+    payment_type: str = "monthly"
+    category_id: Optional[int] = None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)

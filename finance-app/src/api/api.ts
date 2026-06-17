@@ -5,9 +5,14 @@
 
 // In production the frontend is served by the same FastAPI server (if accessed via browser),
 // but when running inside Electron, the protocol is 'file:'. In dev mode (Vite), it's proxy or direct.
-const API_BASE = (window.location.port === '5173' || window.location.protocol === 'file:')
-  ? 'http://localhost:8000/api'
+const API_BASE = (
+  window.location.hostname === 'localhost' ||
+  window.location.hostname === '127.0.0.1' ||
+  window.location.protocol === 'file:'
+) && window.location.port !== '8001'
+  ? 'http://127.0.0.1:8001/api'
   : '/api';
+
 
 // ─── Generic fetch helper ────────────────────────────────
 
@@ -48,6 +53,12 @@ export interface BudgetTableResponse {
   monthly_fact_balance: number[];
   weekly_dates: string[];
   total_profit: number;
+  weekly_remainder: number[];
+  weekly_wallet_total: number[];
+  weekly_cumulative_balance: number[];
+  weekly_fact_remainder: number[];
+  weekly_fact_wallet_total: number[];
+  weekly_fact_cumulative_balance: number[];
 }
 
 export interface ScenarioResponse {
@@ -101,6 +112,7 @@ export interface LoanResponse {
   start_date: string | null;
   end_date: string | null;
   status: 'active' | 'overdue' | 'completed';
+  payment_type: 'weekly' | 'monthly';
   created_at: string;
 }
 
@@ -347,10 +359,7 @@ export async function createSaving(data: {
   });
 }
 
-export async function updateSaving(
-  id: number,
-  data: { name?: string; current?: number; target?: number },
-): Promise<SavingsGoalResponse> {
+export async function updateSaving(id: number, data: { name?: string; current?: number; target?: number }): Promise<SavingsGoalResponse> {
   return request(`/savings/${id}`, {
     method: 'PUT',
     body: JSON.stringify(data),
@@ -358,7 +367,23 @@ export async function updateSaving(
 }
 
 export async function deleteSaving(id: number): Promise<void> {
-  return request(`/savings/${id}`, { method: 'DELETE' });
+  return request(`/savings/${id}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function topupSaving(id: number, amount: number): Promise<SavingsGoalResponse> {
+  return request(`/savings/${id}/topup`, {
+    method: 'POST',
+    body: JSON.stringify({ amount }),
+  });
+}
+
+export async function withdrawSaving(id: number, amount: number): Promise<SavingsGoalResponse> {
+  return request(`/savings/${id}/withdraw`, {
+    method: 'POST',
+    body: JSON.stringify({ amount }),
+  });
 }
 
 
@@ -376,6 +401,7 @@ export async function createLoan(data: {
   interest_rate?: number;
   start_date?: string;
   end_date?: string;
+  payment_type?: 'weekly' | 'monthly';
 }): Promise<LoanResponse> {
   return request('/loans', {
     method: 'POST',
@@ -390,6 +416,13 @@ export async function updateLoan(
   return request(`/loans/${id}`, {
     method: 'PUT',
     body: JSON.stringify(data),
+  });
+}
+
+export async function payLoan(id: number, amount: number): Promise<LoanResponse> {
+  return request(`/loans/${id}/pay`, {
+    method: 'POST',
+    body: JSON.stringify({ amount }),
   });
 }
 

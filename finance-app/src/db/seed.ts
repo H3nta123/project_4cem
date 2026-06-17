@@ -45,14 +45,7 @@ export async function seedDefaultData() {
     { id: 't7', date: '2025-12-14', category: 'Здоровье', description: 'Стоматолог', amount: 4000, type: 'expense', createdAt: now },
   ]);
 
-  await db.investments.bulkAdd([
-    { id: 'inv1', name: 'Сбербанк', type: 'stocks', typeLabel: 'Акции', value: 85000, purchasePrice: 70000, growth: 20.5, createdAt: now },
-    { id: 'inv2', name: 'Газпром', type: 'stocks', typeLabel: 'Акции', value: 42000, purchasePrice: 43400, growth: -3.2, createdAt: now },
-    { id: 'inv3', name: 'ОФЗ', type: 'bonds', typeLabel: 'Облигации', value: 120000, purchasePrice: 111300, growth: 7.8, createdAt: now },
-    { id: 'inv4', name: 'Bitcoin', type: 'crypto', typeLabel: 'Крипто', value: 65000, purchasePrice: 26000, growth: 150.4, createdAt: now },
-    { id: 'inv5', name: 'Фонд Тинькофф', type: 'fund', typeLabel: 'Фонд', value: 95000, purchasePrice: 87400, growth: 8.7, createdAt: now },
-    { id: 'inv6', name: 'Золото', type: 'metals', typeLabel: 'Металлы', value: 55000, purchasePrice: 52200, growth: 5.3, createdAt: now },
-  ]);
+
 
   await db.savings.bulkAdd([
     { id: 'sav1', name: 'Отпуск', current: 120000, target: 200000, createdAt: now },

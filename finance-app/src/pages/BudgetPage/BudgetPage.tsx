@@ -973,6 +973,7 @@ export default function BudgetPage() {
               </tr>
             </thead>
             <tbody>
+
               {/* Income group */}
               <tr className="budget-row-group">
                 <td><ChevronDown size={14} /> Доходы</td>
@@ -1023,23 +1024,23 @@ export default function BudgetPage() {
                 </tr>
               ))}
 
-              {/* Feature 2: Balance row BETWEEN income and expense */}
-              <tr className="budget-row-group budget-row-balance">
-                <td>💰 Баланс</td>
+              {/* Feature: Cumulative Balance - Итого в кошельке */}
+              <tr className="budget-row-group budget-row-wallet-total" style={{ backgroundColor: 'rgba(255, 255, 255, 0.05)' }}>
+                <td>💰 Итого в кошельке</td>
                 {visibleWeeks.map(w => {
-                  const bal = monthly_balance[w.index] || 0;
-                  const factBal = activeBudgetData!.monthly_fact_balance[w.index] || 0;
+                  const val = activeBudgetData?.weekly_wallet_total?.[w.index] || 0;
+                  const factVal = activeBudgetData?.weekly_fact_wallet_total?.[w.index] || 0;
                   return (
-                    <td key={w.index} className={`total-cell ${bal >= 0 ? 'income-total' : 'expense-total'} ${w.index === currentWeekIndex ? 'current-week-cell' : ''}`}>
+                    <td key={w.index} className={`total-cell income-total ${w.index === currentWeekIndex ? 'current-week-cell' : ''}`}>
                       {tableMode === 'both' ? (
                         <div className="both-cell">
-                          <span className="both-plan">{formatMoney(bal, sym)}</span>
-                          <span className="both-fact">{formatMoney(factBal, sym)}</span>
+                          <span className="both-plan">{formatMoney(val, sym)}</span>
+                          <span className="both-fact">{formatMoney(factVal, sym)}</span>
                         </div>
                       ) : tableMode === 'fact' ? (
-                        formatMoney(factBal, sym)
+                        formatMoney(factVal, sym)
                       ) : (
-                        formatMoney(bal, sym)
+                        formatMoney(val, sym)
                       )}
                     </td>
                   );
@@ -1095,6 +1096,29 @@ export default function BudgetPage() {
                   })}
                 </tr>
               ))}
+
+              {/* Feature: Cumulative Balance - Баланс (переходит в Остаток) */}
+              <tr className="budget-row-group budget-row-balance">
+                <td>⚖️ Баланс</td>
+                {visibleWeeks.map(w => {
+                  const bal = activeBudgetData?.weekly_cumulative_balance?.[w.index] || 0;
+                  const factBal = activeBudgetData?.weekly_fact_cumulative_balance?.[w.index] || 0;
+                  return (
+                    <td key={w.index} className={`total-cell ${bal >= 0 ? 'income-total' : 'expense-total'} ${w.index === currentWeekIndex ? 'current-week-cell' : ''}`}>
+                      {tableMode === 'both' ? (
+                        <div className="both-cell">
+                          <span className="both-plan">{formatMoney(bal, sym)}</span>
+                          <span className="both-fact">{formatMoney(factBal, sym)}</span>
+                        </div>
+                      ) : tableMode === 'fact' ? (
+                        formatMoney(factBal, sym)
+                      ) : (
+                        formatMoney(bal, sym)
+                      )}
+                    </td>
+                  );
+                })}
+              </tr>
             </tbody>
           </table>
         </div>

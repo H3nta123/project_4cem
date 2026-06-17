@@ -1,5 +1,5 @@
 import { NavLink, useLocation } from 'react-router-dom';
-import { BarChart3, ArrowLeftRight, PieChart, Wallet, Download, HelpCircle, Settings, Bell } from 'lucide-react';
+import { BarChart3, ArrowLeftRight, PieChart, Wallet, Download, Settings, Bell } from 'lucide-react';
 import './Sidebar.css';
 
 const navItems = [
@@ -18,7 +18,6 @@ const navItems = [
   {
     group: 'ИНСТРУМЕНТЫ', items: [
       { path: '/import', icon: Download, label: 'Импорт' },
-      { path: '/whatif', icon: HelpCircle, label: 'Что если' },
       { path: '/settings', icon: Settings, label: 'Настройки' },
     ]
   },

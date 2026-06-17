@@ -98,6 +98,7 @@ class SavingsGoal(Base):
     name = Column(String(100), nullable=False)
     current = Column(Float, default=0.0)
     target = Column(Float, nullable=False)
+    category_id = Column(Integer, nullable=True)  # link to budget category
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 
@@ -114,6 +115,8 @@ class Loan(Base):
     start_date = Column(String(10), nullable=True)  # ISO date
     end_date = Column(String(10), nullable=True)  # ISO date
     status = Column(String(20), default="active")  # active, overdue, completed
+    payment_type = Column(String(10), default="monthly")  # weekly, monthly
+    category_id = Column(Integer, nullable=True)  # link to budget category
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 
@@ -140,6 +143,23 @@ def migrate_db():
         default_val = '[' + ','.join(['0'] * 52) + ']'
         cursor.execute(f"ALTER TABLE budget_categories ADD COLUMN monthly_fact TEXT NOT NULL DEFAULT '{default_val}'")
         conn.commit()
+    # Check if payment_type column exists in loans
+    cursor.execute("PRAGMA table_info(loans)")
+    columns = [row[1] for row in cursor.fetchall()]
+    if 'payment_type' not in columns:
+        cursor.execute("ALTER TABLE loans ADD COLUMN payment_type TEXT NOT NULL DEFAULT 'monthly'")
+        conn.commit()
+    if 'category_id' not in columns:
+        cursor.execute("ALTER TABLE loans ADD COLUMN category_id INTEGER DEFAULT NULL")
+        conn.commit()
+
+    # Add category_id to savings_goals if missing
+    cursor.execute("PRAGMA table_info(savings_goals)")
+    columns = [row[1] for row in cursor.fetchall()]
+    if 'category_id' not in columns:
+        cursor.execute("ALTER TABLE savings_goals ADD COLUMN category_id INTEGER DEFAULT NULL")
+        conn.commit()
+
     conn.close()
 
 

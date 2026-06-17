@@ -7,8 +7,8 @@ import OperationsPage from './pages/OperationsPage/OperationsPage';
 import AnalyticsPage from './pages/AnalyticsPage/AnalyticsPage';
 import FinancesPage from './pages/FinancesPage/FinancesPage';
 import SettingsPage from './pages/SettingsPage/SettingsPage';
-import WhatIfPage from './pages/WhatIfPage/WhatIfPage';
 import ImportPage from './pages/ImportPage/ImportPage';
+import NotificationToast from './components/NotificationToast/NotificationToast';
 
 function AppContent() {
   const { state } = useApp();
@@ -27,11 +27,11 @@ function AppContent() {
             <Route path="/analytics" element={<AnalyticsPage />} />
             <Route path="/finances" element={<FinancesPage />} />
             <Route path="/settings" element={<SettingsPage />} />
-            <Route path="/whatif" element={<WhatIfPage />} />
             <Route path="/import" element={<ImportPage />} />
           </Route>
         </Routes>
       </HashRouter>
+      <NotificationToast />
     </>
   );
 }
