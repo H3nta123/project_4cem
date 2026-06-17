@@ -1,10 +1,12 @@
 import { useState } from 'react';
 import { Upload, X, CheckCircle, AlertCircle } from 'lucide-react';
+import { useApp } from '../../store/AppContext';
 import * as api from '../../api/api';
 import type { ImportResponse } from '../../api/api';
 import './ImportPage.css';
 
 export default function ImportPage() {
+  const { dispatch } = useApp();
   const [step, setStep] = useState(1);
   const [file, setFile] = useState<File | null>(null);
   const [dragOver, setDragOver] = useState(false);
@@ -29,6 +31,16 @@ export default function ImportPage() {
       const res = await api.importFile(file);
       setResult(res);
       setStep(3);
+
+      // Refresh transactions and budget data in the app state
+      if (res.imported > 0) {
+        const [transactions, budgetTable] = await Promise.all([
+          api.getTransactions(),
+          api.getBudgetTable(),
+        ]);
+        dispatch({ type: 'SET_TRANSACTIONS', payload: transactions });
+        dispatch({ type: 'SET_BUDGET_TABLE', payload: budgetTable });
+      }
     } catch (e) {
       console.error(e);
       setResult({ imported: 0, skipped: 0, errors: ['Ошибка при импорте файла'] });

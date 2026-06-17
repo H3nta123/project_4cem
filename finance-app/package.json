@@ -26,7 +26,8 @@
     },
     "files": [
       "dist/**/*",
-      "main.cjs"
+      "main.cjs",
+      "preload.cjs"
     ],
     "extraResources": [
       {

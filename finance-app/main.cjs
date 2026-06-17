@@ -3,8 +3,12 @@ const path = require('path');
 const { spawn } = require('child_process');
 const fs = require('fs');
 const http = require('http');
+const crypto = require('crypto');
 
 let backendProcess = null;
+
+// ─── Генерируем случайный API-ключ при каждом запуске ────
+const API_KEY = crypto.randomBytes(32).toString('hex');
 
 /**
  * Wait for the backend server to respond on the given port.
@@ -15,7 +19,12 @@ function waitForBackend(port, maxAttempts = 30) {
         let attempts = 0;
         function check() {
             attempts++;
-            const req = http.get(`http://127.0.0.1:${port}/api/settings`, (res) => {
+            const req = http.get({
+                hostname: '127.0.0.1',
+                port: port,
+                path: '/api/settings',
+                headers: { 'X-API-Key': API_KEY },
+            }, (res) => {
                 resolve();
             });
             req.on('error', () => {
@@ -43,8 +52,10 @@ function createWindow() {
         width: 1200,
         height: 800,
         webPreferences: {
-            nodeIntegration: true,
-            contextIsolation: false
+            nodeIntegration: false,
+            contextIsolation: true,
+            sandbox: false, // false чтобы preload имел доступ к process.env
+            preload: path.join(__dirname, 'preload.cjs'),
         }
     });
 
@@ -62,11 +73,18 @@ app.whenReady().then(async () => {
     console.log(`Looking for backend at: ${backendExePath}`);
     console.log(`Exists: ${fs.existsSync(backendExePath)}`);
 
+    // ─── Передаём API-ключ в preload через переменную окружения ───
+    process.env.FINANSPRO_API_KEY = API_KEY;
+
     if (fs.existsSync(backendExePath)) {
         backendProcess = spawn(backendExePath, [], {
             detached: false,
             stdio: 'pipe',
             cwd: path.dirname(backendExePath),
+            env: {
+                ...process.env,
+                FINANSPRO_API_KEY: API_KEY,  // Передаём ключ бэкенду
+            },
         });
 
         backendProcess.stdout.on('data', (data) => {

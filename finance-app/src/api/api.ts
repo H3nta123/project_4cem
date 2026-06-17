@@ -3,6 +3,15 @@
  * All REST calls to the FastAPI backend
  */
 
+// ─── Electron API bridge type ────────────────────────────
+declare global {
+  interface Window {
+    electronAPI?: {
+      getApiKey: () => string;
+    };
+  }
+}
+
 // In production the frontend is served by the same FastAPI server (if accessed via browser),
 // but when running inside Electron, the protocol is 'file:'. In dev mode (Vite), it's proxy or direct.
 const API_BASE = (
@@ -13,12 +22,22 @@ const API_BASE = (
   ? 'http://127.0.0.1:8001/api'
   : '/api';
 
+// ─── API Key (из Electron preload или пусто в dev) ───────
+const API_KEY: string = window.electronAPI?.getApiKey?.() || '';
+
 
 // ─── Generic fetch helper ────────────────────────────────
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+  if (API_KEY) {
+    headers['X-API-Key'] = API_KEY;
+  }
+
   const res = await fetch(`${API_BASE}${path}`, {
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     ...options,
   });
   if (!res.ok) {
@@ -465,8 +484,12 @@ export async function importFile(file: File): Promise<ImportResponse> {
   formData.append('file', file);
   const endpoint = ext === 'xlsx' || ext === 'xls' ? '/import/excel' : '/import/csv';
 
+  const uploadHeaders: Record<string, string> = {};
+  if (API_KEY) uploadHeaders['X-API-Key'] = API_KEY;
+
   const res = await fetch(`${API_BASE}${endpoint}`, {
     method: 'POST',
+    headers: uploadHeaders,
     body: formData,
   });
   if (!res.ok) {
@@ -481,8 +504,12 @@ export async function importSberPdf(file: File): Promise<ImportResponse> {
   const formData = new FormData();
   formData.append('file', file);
 
+  const pdfHeaders: Record<string, string> = {};
+  if (API_KEY) pdfHeaders['X-API-Key'] = API_KEY;
+
   const res = await fetch(`${API_BASE}/import/sber-pdf`, {
     method: 'POST',
+    headers: pdfHeaders,
     body: formData,
   });
   if (!res.ok) {

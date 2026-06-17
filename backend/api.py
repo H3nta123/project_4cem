@@ -5,15 +5,17 @@ investments, savings, loans, settings, import, export, analytics.
 """
 
 import csv
+import hmac
 import io
 import re
 import json
 import logging
 import os
+import secrets
 import sys
 from datetime import datetime, timedelta
 
-from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Query
+from fastapi import FastAPI, Depends, HTTPException, Request, UploadFile, File, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
@@ -62,6 +64,27 @@ logger = logging.getLogger("finanspro")
 
 # ─── App ─────────────────────────────────────────────────
 app = FastAPI(title="ФинансПро API", version="2.1.0")
+
+# ─── Security: API Key ───────────────────────────────────
+# Ключ передаётся через переменную окружения от Electron.
+# В dev-режиме (без ключа) защита не активна.
+API_KEY = os.environ.get("FINANSPRO_API_KEY", "")
+
+MAX_UPLOAD_SIZE = 10 * 1024 * 1024  # 10 MB
+
+
+@app.middleware("http")
+async def verify_api_key(request: Request, call_next):
+    """Проверяем API-ключ на всех /api/* запросах (если ключ задан)."""
+    if API_KEY and request.url.path.startswith("/api/"):
+        client_key = request.headers.get("X-API-Key", "")
+        if not hmac.compare_digest(client_key, API_KEY):
+            from starlette.responses import JSONResponse
+            return JSONResponse(
+                status_code=403,
+                content={"detail": "Invalid or missing API key"},
+            )
+    return await call_next(request)
 
 app.add_middleware(
     CORSMiddleware,
@@ -950,6 +973,8 @@ async def import_csv(
 
     try:
         content = await file.read()
+        if len(content) > MAX_UPLOAD_SIZE:
+            raise HTTPException(status_code=413, detail="Файл слишком большой (максимум 10 МБ)")
         for encoding in ['utf-8-sig', 'utf-8', 'cp1251']:
             try:
                 text = content.decode(encoding)
@@ -1062,6 +1087,8 @@ async def import_excel(
 
     try:
         content = await file.read()
+        if len(content) > MAX_UPLOAD_SIZE:
+            raise HTTPException(status_code=413, detail="Файл слишком большой (максимум 10 МБ)")
         with load_workbook(filename=io.BytesIO(content), read_only=True, data_only=True) as wb:
             ws = wb.active
             if ws is None:
@@ -1177,99 +1204,158 @@ async def import_sber_pdf(
 
     try:
         content = await file.read()
+        if len(content) > MAX_UPLOAD_SIZE:
+            raise HTTPException(status_code=413, detail="Файл слишком большой (максимум 10 МБ)")
         pdf_file = io.BytesIO(content)
         reader = PdfReader(pdf_file)
 
+        full_text = ""
+        for page in reader.pages:
+            text = page.extract_text()
+            if text:
+                full_text += text + "\n"
+
+        if not full_text.strip():
+            return ImportResponse(imported=0, skipped=0, errors=["Не удалось извлечь текст из PDF"])
+
+        # Normalize whitespace: replace non-breaking spaces and multiple spaces
+        full_text = full_text.replace("\xa0", " ")
+
+        logger.info(f"Extracted PDF text length: {len(full_text)}")
+        logger.info(f"First 500 chars: {full_text[:500]}")
+
+        lines = full_text.split("\n")
+
+        # Known Sberbank categories
+        sber_categories = [
+            "Супермаркеты", "Рестораны и кафе", "Прочие расходы", "Прочие операции",
+            "Перевод на карту", "Переводы", "Транспорт", "Одежда и обувь",
+            "Здоровье и аптеки", "Связь и телеком", "Образование", "Развлечения",
+            "Красота и косметика", "Дом и ремонт", "Фастфуд", "Топливо",
+            "Государственные услуги", "Различные товары", "Все для дома",
+            "Животные", "Цветы", "Искусство", "Музыка", "Книги",
+            "Благотворительность", "Такси", "Аренда", "Коммунальные услуги",
+            "Подписки", "Финансовые услуги", "Наличные", "Бонусы",
+        ]
+
+        # Pattern for header lines: DATE TIME CATEGORY AMOUNT BALANCE
+        # e.g. "07.06.2026 21:06 Супермаркеты 229,98 12 549,35"
         tx_header_re = re.compile(
-            r"^(\d{2}\.\d{2}\.\d{4})\s+(\d{2}:\d{2})\s+(.+?)\s+([+-]?\s*[\d\s]+,\d{2})\s+([\d\s]+,\d{2})$"
+            r"^(\d{2}\.\d{2}\.\d{4})\s+(\d{2}:\d{2})\s+"  # date + time
+            r"(.+?)\s+"                                       # category (lazy)
+            r"([+-]?\s*[\d ]+,\d{2})\s+"                      # amount (with optional sign)
+            r"([\d ]+,\d{2})\s*$"                             # balance
         )
 
+        # Pattern for detail lines: DATE CODE DESCRIPTION
+        # e.g. "07.06.2026 081534 MAGNIT MM SALEVA..."
         tx_detail_re = re.compile(
-            r"^(\d{2}\.\d{2}\.\d{4})\s+(\d{6})\s+(.+)$"
+            r"^(\d{2}\.\d{2}\.\d{4})\s+(\d{4,6})\s+(.+)$"
         )
 
         parsed_transactions = []
         current_tx = None
 
-        for page in reader.pages:
-            text = page.extract_text()
-            if not text:
+        for line in lines:
+            line = line.strip()
+            if not line:
                 continue
 
-            lines = text.split("\n")
-            for line in lines:
-                line = line.strip()
+            match_header = tx_header_re.match(line)
+            if match_header:
+                if current_tx:
+                    parsed_transactions.append(current_tx)
 
-                match_header = tx_header_re.match(line)
-                if match_header:
-                    if current_tx:
-                        parsed_transactions.append(current_tx)
+                date_str, time_str, category, amount_str, _ = match_header.groups()
+                current_tx = {
+                    "date": date_str,
+                    "time": time_str,
+                    "category": category.strip(),
+                    "amount_str": amount_str.strip(),
+                    "description": "",
+                }
+                continue
 
-                    date_str, time_str, category, amount_str, _ = match_header.groups()
-                    current_tx = {
-                        "date": date_str,
-                        "time": time_str,
-                        "category": category.strip(),
-                        "amount_str": amount_str.strip(),
-                        "description": "",
-                    }
-                    continue
+            match_detail = tx_detail_re.match(line)
+            if match_detail:
+                date_str, _, description = match_detail.groups()
+                if current_tx:
+                    current_tx["description"] = description.strip()
+                    parsed_transactions.append(current_tx)
+                    current_tx = None
+                continue
 
-                match_detail = tx_detail_re.match(line)
-                if match_detail:
-                    date_str, _, description = match_detail.groups()
-                    if current_tx and current_tx["date"] == date_str:
-                        current_tx["description"] = description.strip()
-                        parsed_transactions.append(current_tx)
-                        current_tx = None
-                    continue
+            # If line looks like a continuation of the description
+            if current_tx and not re.match(r"^\d{2}\.\d{2}\.\d{4}", line):
+                # Might be a wrapped description line (e.g. "****4741" or "карте ****4741")
+                if current_tx["description"]:
+                    current_tx["description"] += " " + line
+                else:
+                    current_tx["description"] = line
 
         if current_tx:
             parsed_transactions.append(current_tx)
+
+        logger.info(f"Parsed {len(parsed_transactions)} transactions from PDF")
 
         for tx_data in parsed_transactions:
             try:
                 day, month, year = tx_data["date"].split(".")
                 iso_date = f"{year}-{month}-{day}"
 
-                clean_amount_str = tx_data["amount_str"].replace("\xa0", "").replace(" ", "").replace(",", ".")
+                clean_amount_str = (
+                    tx_data["amount_str"]
+                    .replace("\xa0", "")
+                    .replace(" ", "")
+                    .replace(",", ".")
+                )
 
                 if clean_amount_str.startswith("+"):
                     tx_type = "income"
-                    amount = float(clean_amount_str.replace("+", ""))
+                    amount = abs(float(clean_amount_str.replace("+", "")))
                 else:
                     tx_type = "expense"
-                    amount = float(clean_amount_str)
+                    amount = abs(float(clean_amount_str.replace("-", "")))
+
+                if amount == 0:
+                    skipped += 1
+                    continue
 
                 exists = db.query(Transaction).filter(
                     Transaction.date == iso_date,
                     Transaction.amount == amount,
                     Transaction.category == tx_data["category"],
-                    Transaction.description == tx_data["description"]
                 ).first()
 
                 if exists:
                     skipped += 1
                     continue
 
+                desc = tx_data.get("description", "").strip()
+                if not desc:
+                    desc = f"Операция {tx_data['category']}"
+
                 new_tx = Transaction(
                     date=iso_date,
                     category=tx_data["category"],
-                    description=tx_data["description"] or f"Операция {tx_data['category']}",
+                    description=desc,
                     amount=amount,
                     type=tx_type,
                 )
                 db.add(new_tx)
                 imported += 1
+                logger.info(f"Imported tx: {iso_date} {tx_data['category']} {amount} ({tx_type})")
 
             except Exception as row_err:
                 errors.append(f"Ошибка при обработке строки за {tx_data.get('date')}: {str(row_err)}")
                 skipped += 1
 
         db.commit()
+        logger.info(f"Import complete: {imported} imported, {skipped} skipped, {len(errors)} errors")
 
     except Exception as e:
         errors.append(f"Не удалось обработать PDF-файл: {str(e)}")
+        logger.error(f"PDF import error: {e}", exc_info=True)
 
     return ImportResponse(imported=imported, skipped=skipped, errors=errors)
 
@@ -1494,8 +1580,14 @@ if os.path.isdir(DIST_DIR):
     async def serve_spa(full_path: str):
         """Serve static files or fallback to index.html for SPA routing."""
         file_path = os.path.join(DIST_DIR, full_path)
-        if full_path and os.path.isfile(file_path):
-            return FileResponse(file_path)
+        # ─── Path Traversal protection ────────────────────
+        resolved = os.path.realpath(file_path)
+        dist_resolved = os.path.realpath(DIST_DIR)
+        if not resolved.startswith(dist_resolved):
+            return HTMLResponse("Forbidden", status_code=403)
+        # ─────────────────────────────────────────────────
+        if full_path and os.path.isfile(resolved):
+            return FileResponse(resolved)
         index_path = os.path.join(DIST_DIR, "index.html")
         if os.path.isfile(index_path):
             return FileResponse(index_path)
