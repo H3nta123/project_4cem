@@ -12,13 +12,10 @@ declare global {
   }
 }
 
-// In production the frontend is served by the same FastAPI server (if accessed via browser),
-// but when running inside Electron, the protocol is 'file:'. In dev mode (Vite), it's proxy or direct.
-const API_BASE = (
-  window.location.hostname === 'localhost' ||
-  window.location.hostname === '127.0.0.1' ||
-  window.location.protocol === 'file:'
-) && window.location.port !== '8001'
+// Electron загружает из file:// — нужен полный URL бэкенда.
+// Standalone (pywebview) и Vite dev — используют relative /api
+//   (Vite проксирует через vite.config.ts, pywebview раздаёт с того же сервера).
+const API_BASE = window.location.protocol === 'file:'
   ? 'http://127.0.0.1:8001/api'
   : '/api';
 
