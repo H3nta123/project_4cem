@@ -1,6 +1,5 @@
 <div align="center">
-  <img src="https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/wallet.svg" alt="Logo" width="80" height="80">
-  <h1 align="center">ФинансПро (FinansPro)</h1>
+  <img src="https://github.com/user-attachments/assets/fd482639-118a-4641-91c1-deab173edeb7" alt="Logo" width="1200" height="700">
   <p align="center">
     <strong>Современное, приватное и безопасное десктопное приложение для управления личными финансами.</strong>
   </p>
@@ -12,7 +11,7 @@
     <img src="https://img.shields.io/badge/FastAPI-005571?style=for-the-badge&logo=fastapi" alt="FastAPI" />
     <img src="https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python" />
     <img src="https://img.shields.io/badge/SQLite-07405E?style=for-the-badge&logo=sqlite&logoColor=white" alt="SQLite" />
-  </p>
+
 </div>
 
 ---
