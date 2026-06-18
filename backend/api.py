@@ -77,7 +77,7 @@ MAX_UPLOAD_SIZE = 10 * 1024 * 1024  # 10 MB
 async def verify_api_key(request: Request, call_next):
     """Проверяем API-ключ на всех /api/* запросах (если ключ задан)."""
     if API_KEY and request.url.path.startswith("/api/"):
-        client_key = request.headers.get("X-API-Key", "")
+        client_key = request.headers.get("X-API-Key") or request.query_params.get("api_key", "")
         if not hmac.compare_digest(client_key, API_KEY):
             from starlette.responses import JSONResponse
             return JSONResponse(

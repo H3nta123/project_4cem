@@ -527,5 +527,6 @@ export async function resetData(): Promise<void> {
 // ─── Export ──────────────────────────────────────────────
 
 export function getExportCsvUrl(): string {
-  return `${API_BASE}/export/csv`;
+  const url = `${API_BASE}/export/csv`;
+  return API_KEY ? `${url}?api_key=${encodeURIComponent(API_KEY)}` : url;
 }
